@@ -3,6 +3,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 
 class UserSerializer(serializers.ModelSerializer):
+    team = serializers.CharField(write_only=True,required=False,default='DEFAULT')
     class Meta:
         model = get_user_model()
         fields = ['id', 'email', 'team']
