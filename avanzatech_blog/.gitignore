@@ -1,0 +1,31 @@
+# Python
+*.pyc
+*.pyo
+__pycache__/
+*.log
+
+# Virtual environment
+env/
+venv/
+
+# Django
+db.sqlite3
+/static/
+media/
+
+# PostgreSQL
+*.sql  # Archivos de exportaciones de la base de datos
+*.dump  # Archivos de respaldo
+pgdata/  # Directorios de datos locales de PostgreSQL (si los tienes)
+pg_log/  # Archivos de logs de PostgreSQL
+
+# VSCode or IDE
+.vscode/
+.idea/
+
+# Environment variables
+.env
+
+# OS Files
+.DS_Store
+Thumbs.db
