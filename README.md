@@ -3,7 +3,8 @@
 
 ---
 
-## **Installation and Configuration Guide** **Installation Guide
+## **Installation and Configuration Guide** 
+Installation Guide
 
 ### **1. Clone this repository**
 ```bash
@@ -80,7 +81,7 @@ Create and assign teams to users (managed by groups in Django).
 ### 3. Assign roles: 
 Define whether a user is “admin” or “blogger”.
 
-### API endpoints
+## API endpoints
 ### Posts API (/api/posts/)
 
 #### 1.Create posts as an authenticated user: 
