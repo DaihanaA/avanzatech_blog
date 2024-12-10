@@ -1,4 +1,4 @@
-Avanzatech Blog
+##Avanzatech Blog
 Es una plataforma de blogs, donde puedes crear, leer y editar posts.Tambien puedes dejar comentarios y dar like a los posts de tu preferiencia. 
 
 1. Para comenzar necesitaras clonar este repositorio:
