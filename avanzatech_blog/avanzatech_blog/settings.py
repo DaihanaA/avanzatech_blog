@@ -57,7 +57,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'avanzatech_blog.urls'
 
-#AUTH_USER_MODEL = 'users.CustomUser'
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
@@ -88,14 +87,23 @@ WSGI_APPLICATION = 'avanzatech_blog.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'avanzatech_blog',
+        'USER': 'blog_user',
+        'PASSWORD': 'Secure_password123',
+        'HOST': 'localhost',  # O la IP de tu servidor si no es local
+        'PORT': '5432',  # El puerto por defecto de PostgreSQL
     }
 }
-
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

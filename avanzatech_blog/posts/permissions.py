@@ -23,11 +23,14 @@ class read_and_edit(permissions.BasePermission):
                 elif obj.permissions == 'authenticated':
                     return request.user.is_authenticated
                 elif obj.permissions == 'author':
+                    print(f"obj-author{obj.author}")
+                    print(f"request-user{request.user}")
+                    print(f"user-comparison{obj.author == request.user}")
                     return obj.author == request.user
                 elif obj.permissions == 'team':
                     user_group = request.user.groups.first()
                     if user_group:
-                        return obj.author.groups.filter(id__in=request.user.groups.values_list('id', flat=True)).exists()
+                        return obj.author.groups.filter(id__in=request.user.groups.values_list('id', flat=True)).exists() ## obj.author.groups == equest.user.groups
                     return False
 
             # Permisos de edición o eliminación (PUT, PATCH, DELETE)

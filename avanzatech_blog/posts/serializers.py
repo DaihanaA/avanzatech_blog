@@ -41,16 +41,16 @@ class LikeSerializer(serializers.ModelSerializer):
         
 
 class CommentSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField()  # Devuelve el nombre de usuario (puedes usar otro campo)
+    user = serializers.StringRelatedField()  # Devuelve el nombre de usuario
     timestamp = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")  # Formato de la fecha
     post_title = serializers.CharField(source='blog_post.title', read_only=True)  # Título del post
 
     class Meta:
         model = Comment
         fields = ['id', 'blog_post', 'user', 'content', 'timestamp', 'post_title']
-        read_only_fields = ['user', 'blog_post', 'timestamp']  # 'user' es solo lectura
+        read_only_fields = ['user', 'blog_post', 'timestamp', 'post_title']  # Campos de solo lectura
         
-    def create(self, validated_data):
-        # Se asegura de que el campo 'user' se asigna si no se pasa
-        user = self.context['request'].user  # Obtiene el usuario autenticado
-        return Comment.objects.create(user=user, **validated_data)
+    def create(self, validated_data): 
+        # El campo 'blog_post' se asigna en la vista, no aquí
+        return Comment.objects.create(**validated_data)
+
