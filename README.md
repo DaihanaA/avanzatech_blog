@@ -1,70 +1,113 @@
-##Avanzatech Blog
-Es una plataforma de blogs, donde puedes crear, leer y editar posts.Tambien puedes dejar comentarios y dar like a los posts de tu preferiencia. 
+# AvanzaTech Blog  
+**AvanzaTech Blog** is a blogging platform where you can create, read, edit and delete posts. You can also interact by leaving comments and liking posts of your choice.
 
-1. Para comenzar necesitaras clonar este repositorio:
-    $git clone https://github.com/DaihanaA/avanzatech_blog.git
+---
 
-2. Crea tu base de datos:
+## **Installation and Configuration Guide** **Installation Guide
+
+### **1. Clone this repository**
+```bash
+    git clone https://github.com/DaihanaA/avanzatech_blog.git
+```
+
+### **2. Create the database**
+Log into your PostgreSQL environment and run the following command to create the database:
+```bash
      CREATE DATABASE avanzatech_blog;
-  y configura el archivo se settings.py:
+```
+Then configure the settings.py file:
+```bash
     DATABASES = {
-        'default': {
+        default': {
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': 'avanzatech_blog',
             'USER': '####',
             'PASSWORD': '###',
-            'HOST': 'localhost',  # O la IP de tu servidor si no es local
-            'PORT': '5432',  # El puerto por defecto de PostgreSQL
+            'HOST': 'localhost', # Or your server IP if not local
+            'PORT': '5432', # The default port of PostgreSQL
         }
     }
-
-3. Configura tu entorno virtual
-   python3 venv env
-   
-4. Incializa tu entorno virtual
+```
+### **3. Set up your virtual environment**
+Create a virtual environment to handle project dependencies:
+```bash
+   python3 -m venv env
+```
+### **4. Activate the virtual environment**   
+```bash
    source env/bin/activate
-   
-5. Instala el archivo de requerimientos con:
+   ```
+### **5. Install the dependencies**  
+Make sure you have pip installed, then run:
+```bash
    pip install -r requeriments.txt
-   (Confirma que tienes instalado pipenv)
+   ```
 
-6. Realiza las migraciones
+### **6. Perform the migrations**  
+Apply the migrations to configure the database:
+
+```bash
+
    python3 manage.py makemigrations
    python3 manage.py migrate
-
-7. Crea tu superusuario:
+```
+### **7. Create a superuser**  
+Generate a superuser to administer the site:
+```bash
   python3 manage.py createsuperuser
-(te pedira un nombre, mail y contraseña)
+```
+You will be prompted to provide a username, email and password.
 
-8. Ya puedes correr el programa:
-   python3 manage.py runserver
-
-10. Para correr los tests:
+### **8. Run the tests**
+Verify that everything is working correctly by running the project tests:
+```bash
     python3 manage.py test posts
+```
 
+### **9. Run the server**
+Start the development server:
+```bash
+   python3 manage.py runserver
+```
 
-Desde el admin site podrás: ('/admin/')
-1. Crear los usuarios(estos los maneja User django)
-2. Crear Teams (igualmente los maneja Groups django)
-3. Asignar un perfil para los usuarios como admin o blogger
+## Functions of the Administration Panel (/admin/)
+From the Admin Site, you can:
 
-Dentro del api/posts podrás:
-1. Crear posts con un usuario autenticado ('api/posts/create/)
-2. Visualizar los posts con los permisos requeridos ('/api/posts/')
-3. Actualizar tus porpios posts o los que pertenezcan a tu equipo('/api/posts/update/')
-4. Borrar tus propios posts o los que pertenezcan a tu equipo('/api/posts/delete')
+### 1. Manage users: 
+Create and modify users (managed by the Django user model).
+### 2. Manage teams: 
+Create and assign teams to users (managed by groups in Django).
+### 3. Assign roles: 
+Define whether a user is “admin” or “blogger”.
 
-Dentro de api/comments podrás:
-1. Crear comentarios en el posts a los que tengas acceso('api/comments/')
-2. Lista los comentarios a los que que tengas acceso('/api/comments/<int:post_id>/')
-3. Borrar un comentario en un post especifo ('/api/comments/<int:comment_id>/delete/')
+### API endpoints
+### Posts API (/api/posts/)
 
-Dentro de api/likes podrás:
-1. Dar like a los posts a los que tengas acceso('/api/likes/<int:post_id>/')
-2. Listar los likes de los posts a los que tengas acceso('/api/likes/')
-3. Eliminar un like de un post ('/api/likes/<int:post_id>')
+#### 1.Create posts as an authenticated user: 
+    /api/posts/posts/create/
 
+#### 2. Display posts with permissions: 
+    /api/posts/
+#### 3. Update your posts or your team's posts: 
+    /api/posts/update/<int:post_id>/
 
+#### 4. Delete your posts or your team's posts: 
+    /api/posts/delete/<int:post_id>/
 
- 
- 
+### Comments API (/api/comments/)
+#### 1. Create comments on posts with access: 
+    /api/comments/create/<int:post_id>/
+#### 2. List comments on a specific post: 
+    /api/comments/<int:post_id>/
+#### 3.Delete a comment: 
+    /api/comments/delete/<int:comment_id>/
+
+### Likes API (/api/likes/)
+
+#### 1.Like posts with access: 
+    /api/likes/create/<int:post_id>/
+#### 2. List “likes” of posts: 
+    /api/likes/
+#### 3. Remove a “like” from a post: 
+    /api/likes/delete/<int:post_id>/   
+
