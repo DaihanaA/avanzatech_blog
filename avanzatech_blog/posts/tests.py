@@ -1227,8 +1227,6 @@ from posts.serializers import CommentSerializer
 from rest_framework.test import APITestCase
 
 
-
-
 class BlogPostValidationTest(APITestCase):
     def test_blog_post_validation(self):
         # Datos inválidos (sin título)

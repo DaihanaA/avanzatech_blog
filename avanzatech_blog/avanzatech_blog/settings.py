@@ -102,7 +102,10 @@ DATABASES = {
         'PASSWORD': 'Secure_password123',
         'HOST': 'localhost',  # O la IP de tu servidor si no es local
         'PORT': '5432',  # El puerto por defecto de PostgreSQL
-    }
+        'TEST': {
+            'NAME': 'test_avanzatech_blog',
+    },
+},
 }
 
 # Password validation
