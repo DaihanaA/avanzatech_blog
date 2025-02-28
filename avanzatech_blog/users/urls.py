@@ -1,8 +1,9 @@
 from django.urls import path
-from . import views  # Importa las vistas correspondientes para las autenticaciones
+from .views import RegistroView
+from .views import get_current_user
+
 
 urlpatterns = [
-    path('register/', views.UserCreateView.as_view(), name='register'),
-    path('login/', views.LoginView.as_view(), name='login'),
-    
+    path('register/', RegistroView.as_view(), name='register'),
+    path('current-user/', get_current_user, name='current-user'),
 ]

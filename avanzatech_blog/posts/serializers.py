@@ -5,52 +5,80 @@ from django.contrib.auth.models import Group
 
 class BlogPostSerializer(serializers.ModelSerializer):
     author = serializers.StringRelatedField()
-    comment_count = serializers.IntegerField(read_only=True)
+    comment_count = serializers.SerializerMethodField()
     excerpt = serializers.SerializerMethodField()
     team = serializers.SerializerMethodField()
+    likes_count = serializers.SerializerMethodField()
+    liked_by_user = serializers.SerializerMethodField()
+    timestamp = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", read_only=True)
+
+    # 🔥 Campos de permisos correctamente configurados
+    public_permission = serializers.ChoiceField(choices=BlogPost._meta.get_field('public_permission').choices)
+    authenticated_permission = serializers.ChoiceField(choices=BlogPost._meta.get_field('authenticated_permission').choices)
+    team_permission = serializers.ChoiceField(choices=BlogPost._meta.get_field('team_permission').choices)
     
+    # ❌ Corregido: `author_permission` debería ser un `CharField`, no un `SerializerMethodField`
+    author_permission = serializers.CharField(default="READ_EDIT",read_only=True)
+
     class Meta:
         model = BlogPost
-        fields = ['id','title','content','excerpt','timestamp','permissions','team','author','comment_count',]
+        fields = [
+            'id', 'title', 'content', 'author', 'comment_count', 'excerpt',
+            'team', 'likes_count', 'liked_by_user', 'public_permission',
+            'authenticated_permission', 'team_permission', 'author_permission', 'timestamp'
+        ]
         read_only_fields = ['author']
-        
-        
+
+    def __init__(self, *args, **kwargs):
+        """ Evita importaciones circulares """
+        super().__init__(*args, **kwargs)
+        from .serializers import CommentSerializer  
+        self.fields['comments'] = CommentSerializer(source='comments_set', many=True, read_only=True)    
+
     def get_likes(self, obj):
-        """Obtiene la lista de usuarios que dieron like al post."""
-        return obj.likes.values_list('user__username', flat=True)  # Devuelve solo los nombres de usuario
-    
+        return list(obj.likes.values_list('user__username', flat=True))  
+
     def get_excerpt(self, obj):
-        # Calcula los primeros 200 caracteres del contenido
+        """Muestra los primeros 200 caracteres"""
         return obj.content[:200]
     
     def get_team(self, obj):
-        # Obtener el primer grupo del autor
+        """Obtiene el grupo del autor"""
         groups = obj.author.groups.all()
-        if groups.exists():
-            return groups.first().name  # Retorna el nombre del primer grupo
-        return "No Group"
+        return groups.first().name if groups.exists() else "No Group"
+    
+    def get_likes_count(self, obj):
+        return obj.likes.count()  
+    
+    def get_liked_by_user(self, obj):
+        user = self.context['request'].user
+        return obj.likes.filter(id=user.id).exists() if user.is_authenticated else False
 
+    def get_comment_count(self, obj):
+        """Cuenta los comentarios correctamente"""
+        return obj.comments_set.count()  
+
+  
 
 class LikeSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField()  # Para mostrar el nombre del usuario
-    blog_post = serializers.StringRelatedField()  # Para mostrar el título del post
+    user = serializers.StringRelatedField()
+    blog_post = serializers.StringRelatedField()
+    timestamp = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", read_only=True)
     
     class Meta:
         model = Like
-        fields  = ['id', 'user', 'blog_post']
-        
+        fields  = ['id', 'user', 'blog_post', 'timestamp']
 
 class CommentSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField()  # Devuelve el nombre de usuario
-    timestamp = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")  # Formato de la fecha
-    post_title = serializers.CharField(source='blog_post.title', read_only=True)  # Título del post
+    user = serializers.StringRelatedField()
+    timestamp = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", read_only=True)
+    post_title = serializers.CharField(source='blog_post.title', read_only=True)
 
     class Meta:
         model = Comment
         fields = ['id', 'blog_post', 'user', 'content', 'timestamp', 'post_title']
-        read_only_fields = ['user', 'blog_post', 'timestamp', 'post_title']  # Campos de solo lectura
+        read_only_fields = ['user', 'blog_post', 'timestamp', 'post_title']
         
     def create(self, validated_data): 
-        # El campo 'blog_post' se asigna en la vista, no aquí
         return Comment.objects.create(**validated_data)
-
+    

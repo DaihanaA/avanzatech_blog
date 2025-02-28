@@ -43,16 +43,21 @@ INSTALLED_APPS = [
     'users',
     'posts',
     'drf_spectacular',
+    'corsheaders',
+    'rest_framework_simplejwt',
+    'rest_framework.authtoken',
+    
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'avanzatech_blog.urls'
@@ -62,8 +67,38 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # Token de acceso dura 30 minutos
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),  # Token de refresco dura 7 días
+    'ROTATE_REFRESH_TOKENS': True,  # Permite actualizar tokens de refresco
+    'BLACKLIST_AFTER_ROTATION': True,  # Invalida el token viejo después de renovarlo
+    'AUTH_HEADER_TYPES': ('Bearer',),  # Usa "Bearer" en la cabecera de autenticación
+}
+
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
+CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:4200",  # Angular frontend
+]
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:4200",  # Permite que Django acepte peticiones de Angular
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+# Configurar cookies de sesión para autenticación basada en sesiones
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = True  # Usa True en producción con HTTPS
+SESSION_COOKIE_SAMESITE = "None"  # O prueba con "None" si usas HTTPS
+
+CSRF_COOKIE_NAME = "csrftoken"
+CSRF_COOKIE_HTTPONLY = False  # Permitir acceso desde JavaScript
+CSRF_USE_SESSIONS = False     # No almacenar CSRF en la sesión
+CSRF_COOKIE_SAMESITE = "None"
 
 TEMPLATES = [
     {
@@ -165,20 +200,24 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        
     ),
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle'
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/day',
-        'user': '1000/day'
+        'anon': '10000/day',
+        'user': '10000/day'
     },
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10,
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
+    'PAGE_SIZE': 5,
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
 }

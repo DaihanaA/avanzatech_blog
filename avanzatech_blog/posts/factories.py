@@ -22,7 +22,7 @@ class BlogPostFactory(DjangoModelFactory):
     title = factory.Sequence(lambda n: f"Post {n}")
     content = "Contenido de prueba."
     author = factory.SubFactory(UserFactory)
-    permissions = "public"  # Puede ser "public", "authenticated" o "author"
+    
 
 
 class CommentFactory(DjangoModelFactory):

@@ -1,77 +1,42 @@
 from rest_framework import permissions
+from .models import BlogPost, Comment, Permissions
 
-class read_and_edit(permissions.BasePermission):
-    
-    def has_permission(self, request, view):
-        # Solo los usuarios autenticados pueden crear posts, likes y comentarios
-        if request.method == 'POST':
-            return request.user.is_authenticated
-        return True
+
+class BlogPostPermission(permissions.BasePermission):
+    """ Controla el acceso a los posts y comentarios según los permisos definidos """
 
     def has_object_permission(self, request, view, obj):
+        """ Determina si el usuario puede ver o modificar el post o comentario """
+        user = request.user
+        is_authenticated = user.is_authenticated
 
-        # Permitir acceso total a superusuarios
-        if request.user.is_superuser:
-            return True
-        
-        #permiso de los post
-        if hasattr(obj, 'permissions'):
-            # Permisos de lectura (SAFE_METHODS)
+        # 🔹 Si el objeto es un BlogPost, aplicar reglas de acceso a posts
+        if isinstance(obj, BlogPost):
+            is_author = obj.author == user
+            # Verificar si el usuario es miembro del mismo equipo que el autor del post
+            is_team_member = user.groups.filter(id__in=obj.author.groups.values_list('id', flat=True)).exists()
+
+            # Determinar nivel de permisos según el rol del usuario
+            if is_author:
+                permission_level = Permissions.READ_EDIT  # El autor siempre tiene permisos completos
+            elif is_team_member:
+                permission_level = obj.team_permission
+            elif not is_authenticated:
+                permission_level = obj.public_permission  # Solo permisos públicos si no está autenticado
+            else:
+                permission_level = obj.authenticated_permission
+
+            # Reglas para métodos seguros (GET)
             if request.method in permissions.SAFE_METHODS:
-                if obj.permissions == 'public':
-                    return True
-                elif obj.permissions == 'authenticated':
-                    return request.user.is_authenticated
-                elif obj.permissions == 'author':
-                    print(f"obj-author{obj.author}")
-                    print(f"request-user{request.user}")
-                    print(f"user-comparison{obj.author == request.user}")
-                    return obj.author == request.user
-                elif obj.permissions == 'team':
-                    user_group = request.user.groups.first()
-                    if user_group:
-                        return obj.author.groups.filter(id__in=request.user.groups.values_list('id', flat=True)).exists() ## obj.author.groups == equest.user.groups
-                    return False
+                # Métodos seguros como GET
+                return permission_level in [Permissions.READ, Permissions.READ_EDIT]
+            else:
+                # Métodos no seguros como POST, PUT, DELETE
+                return permission_level == Permissions.READ_EDIT  # Permite edición si tiene el permiso adecuado
 
-            # Permisos de edición o eliminación (PUT, PATCH, DELETE)
-            elif request.method in ['PUT', 'PATCH', 'DELETE']:
-                # Permitir si es el autor
-                if obj.author == request.user :
-                    return True
-                
-                # Permitir si es del mismo equipo (team)
-                user_group = request.user.groups.first()
-                if user_group:
-                    return obj.author.groups.filter(id=user_group.id).exists()
+        # 🔹 Si el objeto es un Comment, aplicar reglas de acceso a comentarios
+        elif isinstance(obj, Comment):
+            # Solo el autor del comentario o del post pueden editar o eliminarlo
+            return obj.user == user or obj.blog_post.author == user
 
-                return False
-
-        #permiso de los likes y los comentarios
-        if hasattr(obj, 'post'):
-            
-            if request.method in permissions.SAFE_METHODS:
-                if obj.post.permissions == 'public':
-                    return True
-                elif obj.post.permissions == 'authenticated':
-                    return request.user.is_authenticated
-                elif obj.post.permissions == 'author':
-                    return obj.author == request.user
-                elif obj.post.permissions == 'team':
-                    user_group = request.user.groups.first()
-                    if user_group:
-                        return obj.author.groups.filter(id=user_group.id).exists()
-                    return False
-
-            # Permitir si el usuario es el autor del comentario o es superusuario
-            #return obj.user == request.user or request.user.is_superuser
-            if request.method in ['PUT', 'PATCH', 'DELETE']:
-                if obj.user == request.user:
-                    return True
-            
-                user_group = request.user.groups.first()
-                if user_group:
-                    return obj.author.groups.filter(id=user_group.id).exists()
-
-                return False
-        # Por defecto, denegar acceso si no es BlogPost ni Comment
-        return False
+        return False  # Si no es un objeto válido o no cumple las condiciones, denegar acceso

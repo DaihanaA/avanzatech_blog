@@ -1,10 +1,11 @@
 from rest_framework import viewsets
+from django.contrib.auth.models import AnonymousUser
 from rest_framework import status
+from .models import Permissions  # Add this line to import Permissions
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from .permissions import  read_and_edit
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from .paginators import LikePagination,CommentPagination,PostPagination
 from .serializers import BlogPostSerializer, CommentSerializer, LikeSerializer
 from .models import BlogPost, Like,Comment
@@ -19,242 +20,299 @@ from django.db.models import Count
 from rest_framework.exceptions import NotFound
 
 
+from rest_framework import generics, permissions
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework import status
+from .models import BlogPost
+from .serializers import BlogPostSerializer
+
+class BlogPostViewSet(viewsets.ModelViewSet):
+    queryset = BlogPost.objects.all().order_by('-timestamp')
+    serializer_class = BlogPostSerializer
+    permission_classes = [permissions.IsAuthenticated]  # Solo usuarios autenticados pueden crear posts
+
+    def perform_create(self, serializer):
+        """ 🔥 Asigna automáticamente el usuario autenticado como autor """
+        serializer.save(author=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        """ 📌 Personaliza la respuesta al crear un post """
+        response = super().create(request, *args, **kwargs)
+        return Response({
+            "message": "Blog post creado con éxito!",
+            "post": response.data
+        }, status=response.status_code)
+
+
+from django.db.models import Count, Q
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import BlogPost
+from .serializers import BlogPostSerializer
+from .paginators import PostPagination
+from .permissions import BlogPostPermission  # Importamos la clase de permisos
+
 class PostListView(APIView):
     """
-    Vista para listar los posts, incluyendo el conteo de comentarios en cada post.
-    Solo los posts accesibles según los permisos del usuario autenticado o anónimo.
+    Vista para listar los posts basados en los permisos definidos en `BlogPostPermission`.
     """
-    permission_classes = [read_and_edit]
+    permission_classes = [BlogPostPermission]
+    pagination_class = PostPagination
 
     def get(self, request):
         user = request.user
-        
-        posts = BlogPost.objects.all()
+        is_authenticated = user.is_authenticated
 
-        # Filtrar según permisos
-        if user.is_authenticated:
-            posts = posts.filter(
-                Q(permissions='public') |
-                Q(permissions='authenticated') |
-                (Q(permissions='author') & Q(author=user)) |
-                (Q(permissions='team') & Q(author__groups__in=user.groups.all()))
-            )
-        else:
-            posts = posts.filter(permissions='public')
+        # 🔹 Filtros basados en permisos
+        filters = Q(public_permission='READ')  # Usuarios anónimos solo ven posts públicos
 
-        posts = posts.annotate(comment_count=Count('comments')).order_by('-timestamp')
+        if is_authenticated:
+            filters |= Q(authenticated_permission__in=['READ', 'READ_EDIT'])  # 🔥 Agregado 'READ_EDIT'
+            filters |= Q(author=user)  # El autor siempre puede ver su post
+            filters |= Q(team_permission__in=['READ', 'READ_EDIT'], author__groups__in=user.groups.all())
 
 
-        # Paginación
+        # 🔹 Filtrar posts en la base de datos
+        posts = BlogPost.objects.filter(filters).annotate(
+            comment_count=Count('comments'),
+            likes_count=Count('like_entries')
+        ).distinct().order_by('-timestamp')
+
+        # 🔹 Paginación
         paginator = PostPagination()
         result_page = paginator.paginate_queryset(posts, request)
-        
-        # Serializar los posts
-        serializer = BlogPostSerializer(result_page, many=True)
-        
-        # Retornar respuesta paginada
+
+        # 🔹 Serializar los posts
+        serializer = BlogPostSerializer(result_page, many=True, context={'request': request})
+
         return paginator.get_paginated_response(serializer.data)
 
-class BlogPostCreateViewSet(viewsets.ModelViewSet):
-    """
-    Vista para crear un nuevo post.
-    Solo usuarios autenticados pueden crear posts.
-    """
-    queryset = BlogPost.objects.all()
-    serializer_class = BlogPostSerializer
-    permission_classes = [IsAuthenticated]  # Solo usuarios autenticados pueden crear posts
 
-    def perform_create(self, serializer):
-        # Establecer el autor como el usuario autenticado
-        serializer.save(author=self.request.user)
-        
-
-    
 class PostDetailViewSet(viewsets.ModelViewSet):
     """
-    Vista para obtener detalles de un post y agregar comentarios.
+    Vista para obtener detalles de un post y manejar comentarios.
     """
-    permission_classes = [read_and_edit]  # Solo usuarios autenticados pueden acceder
+    permission_classes = [BlogPostPermission]  # Aplicar permisos correctamente
 
-    # Configurar el queryset para mostrar los posts
     def get_queryset(self):
-        queryset = BlogPost.objects.all()
-        return queryset
+        """
+        Retorna solo los posts a los que el usuario tiene acceso.
+        """
+        user = self.request.user
+        posts = BlogPost.objects.all()
 
-    # Mostrar los detalles del post, comentarios y likes
+        # Aplicar permisos de acceso
+        return [post for post in posts if BlogPostPermission().has_object_permission(self.request, self, post)]
+
     def retrieve(self, request, pk=None):
+        """
+        Obtener detalles de un post con sus comentarios y likes.
+        """
         post = get_object_or_404(BlogPost, id=pk)
+        
+        # Verificar permisos con DRF
+        self.check_object_permissions(request, post)
 
         # Serializar el post
-        post_serializer = BlogPostSerializer(post)
-        
-         # Verificar permisos
-        if post.permissions == BlogPost.PUBLIC:
-            return Response(BlogPostSerializer(post).data)
-        
-        # Para posts autenticados, solo usuarios autenticados pueden verlos
-        if post.permissions == BlogPost.AUTHENTICATED and not request.user.is_authenticated:
-            raise PermissionDenied("You must be authenticated to view this post.")
-        
-        # Para posts solo del autor, solo el autor puede ver el post
-        if post.permissions == BlogPost.AUTHOR and post.author != request.user:
-            raise PermissionDenied("You are not the author of this post.")
-        
-        if post.permissions == BlogPost.TEAM:
-            # Verificar si el usuario pertenece al grupo "team_name"
-            if not request.user.groups.filter(name='team_name').exists():
-                raise PermissionDenied("You must be part of the correct team to view this post.")
+        post_serializer = BlogPostSerializer(post, context={'request': request})
 
-            
-        # Obtener los comentarios del post
+        # Obtener comentarios y likes
         comments = Comment.objects.filter(blog_post=post)
         comments_serializer = CommentSerializer(comments, many=True)
 
-        # Contar los likes
         likes_count = post.likes.count()
-        likes = Like.objects.filter(blog_post=post)
-        likes_data = LikeSerializer(likes, many=True).data
+        likes_data = LikeSerializer(Like.objects.filter(blog_post=post), many=True).data
 
-        # Preparar la respuesta
+        # Construir respuesta
         response_data = post_serializer.data
-        response_data['likes_count'] = likes_count
-        response_data['comments'] = comments_serializer.data
-        response_data['likes_data'] = likes_data
+        response_data.update({
+            'likes_count': likes_count,
+            'comments': comments_serializer.data,
+            'likes_data': likes_data
+        })
+
+        return Response(response_data)
+    
+    def destroy(self, request, pk=None):
+        """
+        Eliminar un post si el usuario tiene permisos.
+        """
+        post = get_object_or_404(BlogPost, id=pk)
         
-        return Response(BlogPostSerializer(post).data)
+        # Verificar permisos de eliminación
+        self.check_object_permissions(request, post)
+
+        post.delete()
+        return Response({'message': 'Post eliminado correctamente'}, status=status.HTTP_204_NO_CONTENT)
+        
 
 
-        
 
 class BlogPostDeleteView(DestroyAPIView):
     """
     Vista para borrar un post.
-    Solo el autor o el team del post puede borrarlo.
+    Solo el autor o el equipo pueden borrarlo.
     """
     queryset = BlogPost.objects.all()
     serializer_class = BlogPostSerializer
-    permission_classes = [read_and_edit]
-    
+    permission_classes = [BlogPostPermission]  # Usamos permisos correctos
+
+    def perform_destroy(self, instance):
+        # ✅ Verificar permisos con DRF antes de borrar
+        self.check_object_permissions(self.request, instance)
+        instance.delete()
+
+
+                
+from rest_framework.generics import RetrieveUpdateAPIView
+from django.shortcuts import get_object_or_404
+from .models import BlogPost
+from .serializers import BlogPostSerializer
+from .permissions import BlogPostPermission
+
 class BlogPostUpdateView(RetrieveUpdateAPIView):
     """
-    Vista para update un post.
-    Solo el autor o el team puede update.
+    Vista para actualizar un post.
+    Solo el autor o el equipo pueden editarlo.
     """
     queryset = BlogPost.objects.all()
     serializer_class = BlogPostSerializer
-    permission_classes = [read_and_edit]
+    permission_classes = [BlogPostPermission]  # Usamos permisos correctos
+
+    def perform_update(self, serializer):
+        post = self.get_object()
+
+        # ✅ Verificar permisos con DRF
+        self.check_object_permissions(self.request, post)
+
+        serializer.save(author=self.request.user)
+
     
-    
+from rest_framework.permissions import AllowAny
+from django.db.models import Q
+from rest_framework.generics import ListAPIView
+
 class CommentListView(ListAPIView):
+    """
+    Vista para listar comentarios de posts que el usuario puede ver.
+    """
     serializer_class = CommentSerializer
-    permission_classes = [read_and_edit]  
     pagination_class = CommentPagination
+    permission_classes = [BlogPostPermission]  # 🔥 Permite acceso sin autenticación
 
     def get_queryset(self):
-        """
-        Filtra los comentarios basados en los permisos del post asociado.
-        """
-        # Obtiene todos los comentarios
-        all_comments = Comment.objects.all()
+        """ Retorna solo los comentarios de posts accesibles según permisos. """
+        user = self.request.user
+        is_authenticated = user.is_authenticated
+        post_id = self.request.query_params.get('post_id')
 
-        # Filtrar comentarios basados en los permisos del post
-        allowed_comments = []
-        for comment in all_comments:
-            post = comment.blog_post
-            if post.permissions == 'public':
-                allowed_comments.append(comment)
-            elif post.permissions == 'authenticated' and self.request.user.is_authenticated:
-                allowed_comments.append(comment)
-            elif post.permissions == 'author' and self.request.user == post.author:
-                allowed_comments.append(comment)
-            elif post.permissions == 'team' and self.request.user.groups.filter(id=post.author.groups.first().id).exists():
-                allowed_comments.append(comment)
+        # 🔹 Filtro base: Posts públicos
+        filters = Q(public_permission__in=[Permissions.READ, Permissions.READ_EDIT])
 
-        # Devuelve el queryset filtrado
-        return Comment.objects.filter(id__in=[comment.id for comment in allowed_comments]).order_by('timestamp')
+        if is_authenticated:
+            filters |= Q(authenticated_permission__in=[Permissions.READ, Permissions.READ_EDIT])  # ✅ Usuarios autenticados
+            filters |= Q(author=user)  # ✅ Si el usuario es el autor del post
+            filters |= Q(team_permission__in=[Permissions.READ, Permissions.READ_EDIT], 
+                         author__groups__id__in=user.groups.values_list("id", flat=True))  # ✅ Si pertenece al equipo
+
+        # 🔹 Obtener posts accesibles
+        allowed_posts = BlogPost.objects.filter(filters).distinct()
+
+        # 🔹 Filtrar comentarios de esos posts
+        queryset = Comment.objects.filter(blog_post__in=allowed_posts).order_by('timestamp')
+
+        # 🔹 Si se proporciona `post_id`, filtrar aún más
+        if post_id:
+            queryset = queryset.filter(blog_post__id=post_id)
+
+        return queryset
+
 
 class PostCommentsView(CreateAPIView):
+    """
+    Vista para crear un comentario en un post, validando los permisos del usuario.
+    """
     serializer_class = CommentSerializer
-    permission_classes = [read_and_edit]
+    permission_classes = [BlogPostPermission]
 
     def perform_create(self, serializer):
         """
         Verifica los permisos del post antes de permitir la creación del comentario.
         """
         post_id = self.kwargs['post_id']
-        try:
-            post = BlogPost.objects.get(id=post_id)
-        except BlogPost.DoesNotExist:
+
+        # Obtener el post y verificar si existe
+        post = BlogPost.objects.select_related('author').filter(id=post_id).first()
+        if not post:
             raise NotFound("Post not found")
 
-        # Verificar permisos del post antes de crear el comentario
-        if post.permissions == 'public':
-            serializer.save(blog_post=post, user=self.request.user)
-        elif post.permissions == 'authenticated' and self.request.user.is_authenticated:
-            serializer.save(blog_post=post, user=self.request.user)
-        elif post.permissions == 'author' and self.request.user == post.author:
-            serializer.save(blog_post=post, user=self.request.user)
-        elif post.permissions == 'team' and self.request.user.groups.filter(id=post.author.groups.first().id).exists():
-            serializer.save(blog_post=post, user=self.request.user)
-        else:
+        user = self.request.user
+        is_authenticated = user.is_authenticated
+
+        # Verificar permisos según los campos del modelo
+        has_permission = (
+            post.public_permission in [Permissions.READ, Permissions.READ_EDIT] or
+            (post.authenticated_permission in [Permissions.READ, Permissions.READ_EDIT] and is_authenticated) or
+            (post.author == user)  or
+            (post.team_permission in [Permissions.READ, Permissions.READ_EDIT] and user.groups.filter(id__in=post.author.groups.values_list('id', flat=True)).exists())
+        )
+
+        if not has_permission:
             raise PermissionDenied("You do not have permission to comment on this post.")
 
-
+        # Guardar comentario si el usuario tiene permisos
+        serializer.save(blog_post=post, user=user)
 
         
 class CommentDeleteView(APIView):
-    permission_classes = [read_and_edit]  # Asegurarse de que el usuario esté autenticado
+    """
+    Vista para eliminar un comentario. Solo el autor o un miembro del equipo con permiso 'read_edit' pueden eliminarlo.
+    """
+    permission_classes = [BlogPostPermission]  
 
     def delete(self, request, comment_id):
-        try:
-            # Intentamos obtener el comentario por su id
-            comment = Comment.objects.get(id=comment_id)
-        except Comment.DoesNotExist:
-            raise NotFound("Comentario no encontrado.")
-        
-        # Verificamos si el usuario que hace la solicitud es el autor del comentario
-        if comment.user != request.user:  # Cambié 'author' por 'user'
-            raise PermissionDenied("No tienes permiso para eliminar este comentario.")
-        
-        # Si pasa la verificación, eliminamos el comentario
-        comment.delete()
-        return Response({"detail": "Comentario eliminado correctamente."}, status=status.HTTP_204_NO_CONTENT)
+        user = request.user
+        if not user.is_authenticated:
+            raise PermissionDenied("Debes estar autenticado para eliminar un comentario.")
 
+        # 🔹 Buscar el comentario y manejar si no existe
+        comment = get_object_or_404(Comment, id=comment_id)
+
+        # 🔹 Permitir eliminación si el usuario es el autor
+        if comment.user == user:
+            comment.delete()
+            return Response({"detail": "Comentario eliminado correctamente."}, status=status.HTTP_204_NO_CONTENT)
+
+        # 🔹 Verificar permisos del equipo si existe
+        blog_post = comment.blog_post
+        if blog_post.team_permission == "read_edit":
+            if blog_post.team and user.groups.filter(id=blog_post.team.id).exists():
+                comment.delete()
+                return Response({"detail": "Comentario eliminado correctamente."}, status=status.HTTP_204_NO_CONTENT)
+
+        # ❌ Si no es el autor ni tiene permisos en el equipo, denegar la acción
+        raise PermissionDenied("No tienes permiso para eliminar este comentario.")
 
     
-from rest_framework.permissions import BasePermission
+
 
 class LikeListView(ListAPIView):
     serializer_class = LikeSerializer
-    permission_classes = [read_and_edit]  # Permisos generales para la vista
+    permission_classes = [BlogPostPermission]
     pagination_class = LikePagination
 
     def get_queryset(self):
-        """
-        Filtra los likes basados en los permisos del post asociado.
-        """
-        # Obtiene todos los likes
-        all_likes = Like.objects.all()
+        post_id = self.request.query_params.get('post')
 
-        # Filtrar likes basados en los permisos del post
-        allowed_likes = []
-        for like in all_likes:
-            post = like.blog_post
-            if post.permissions == 'public':
-                allowed_likes.append(like)
-            elif post.permissions == 'authenticated' and self.request.user.is_authenticated:
-                allowed_likes.append(like)
-            elif post.permissions == 'author' and self.request.user == post.author:
-                allowed_likes.append(like)
-            elif post.permissions == 'team' and self.request.user.groups.filter(id=post.author.groups.first().id).exists():
-                allowed_likes.append(like)
+        queryset = Like.objects.all().order_by("timestamp")
 
-        # Devuelve el queryset filtrado
-        return Like.objects.filter(id__in=[like.id for like in allowed_likes]).order_by('timestamp')
+        if post_id:
+            queryset = queryset.filter(blog_post__id=post_id)
+
+        return queryset  # No llamamos paginate_queryset aquí, DRF lo hace automáticamente
 
 
-
-from django.db import IntegrityError
 
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied
@@ -263,42 +321,57 @@ from rest_framework.views import APIView
 from posts.models import Like, BlogPost
 
 class PostLikeView(APIView):
-    permission_classes = [read_and_edit]  
+    permission_classes = [BlogPostPermission]  
 
     def post(self, request, *args, **kwargs):
         """
         Agrega un 'like' a un post si el usuario tiene permisos.
         """
         post_id = self.kwargs['post_id']
+        user = self.request.user
+
+        if isinstance(user, AnonymousUser):  # 🔹 Verificamos si el usuario no está autenticado
+            raise PermissionDenied("You must be logged in to like a post.")
+
         try:
             post = BlogPost.objects.get(id=post_id)
         except BlogPost.DoesNotExist:
             raise NotFound("Post not found")
 
         # Verificar permisos antes de agregar el like
-        if post.permissions == 'public':
+        if post.public_permission == Permissions.READ:
             return self._add_like(post)
-        elif post.permissions == 'authenticated' and self.request.user.is_authenticated:
-            return self._add_like(post)
-        elif post.permissions == 'author' and self.request.user == post.author:
-            return self._add_like(post)
-        elif post.permissions == 'team' and self.request.user.groups.filter(id=post.author.groups.first().id).exists():
-            return self._add_like(post)
-        else:
-            raise PermissionDenied("You do not have permission to like this post.")
+
+        if user.is_authenticated:
+            if post.authenticated_permission in [Permissions.READ, Permissions.READ_EDIT]:
+                return self._add_like(post)
+
+            if user == post.author:
+                return self._add_like(post)
+
+            if post.team_permission in [Permissions.READ, Permissions.READ_EDIT] and user.groups.filter(id__in=post.author.groups.values_list("id", flat=True)).exists():
+                return self._add_like(post)
+
+
+        raise PermissionDenied("You do not have permission to like this post.")
 
     def delete(self, request, *args, **kwargs):
         """
         Elimina un 'like' de un post si el usuario lo había dado previamente.
         """
         post_id = self.kwargs['post_id']
+        user = self.request.user
+
+        if isinstance(user, AnonymousUser):  # 🔹 Verificamos si el usuario no está autenticado
+            raise PermissionDenied("You must be logged in to remove a like.")
+
         try:
             post = BlogPost.objects.get(id=post_id)
         except BlogPost.DoesNotExist:
             raise NotFound("Post not found")
 
         # Verificar si el usuario ya ha dado like al post
-        like = Like.objects.filter(user=self.request.user, blog_post=post).first()
+        like = Like.objects.filter(user=user, blog_post=post).first()
         
         if like:
             like.delete()
@@ -310,12 +383,14 @@ class PostLikeView(APIView):
         """
         Función auxiliar para agregar un like a un post.
         """
+        user = self.request.user
+
         # Verificar si el usuario ya ha dado like al post
-        existing_like = Like.objects.filter(user=self.request.user, blog_post=post).first()
+        existing_like = Like.objects.filter(user=user, blog_post=post).first()
         
         if existing_like:
             return Response({"detail": "You have already liked this post."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Crear el like
-        Like.objects.create(blog_post=post, user=self.request.user)
+        Like.objects.create(blog_post=post, user=user)
         return Response({"detail": "Like added successfully."}, status=status.HTTP_201_CREATED)

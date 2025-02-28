@@ -1,13 +1,14 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (PostListView,
-                    BlogPostCreateViewSet, 
+                    # BlogPostCreateViewSet, 
                     PostDetailViewSet,
                     BlogPostDeleteView, 
                     BlogPostUpdateView,
                     CommentListView, PostCommentsView,
                     LikeListView, PostLikeView,
-                    CommentDeleteView)
+                    CommentDeleteView, 
+                    BlogPostViewSet)
 
 # Configuración del DefaultRouter para los detalles de los posts
 router = DefaultRouter()
@@ -18,7 +19,7 @@ urlpatterns = [
     # Endpoint para listar los posts
     path('posts/', PostListView.as_view(), name='post-list'),   
     # Endpoint para crear un nuevo post
-    path('posts/create/', BlogPostCreateViewSet.as_view({'post': 'create'}), name='post-create'),  
+    path('posts/create/', BlogPostViewSet.as_view({'post': 'create'}), name='post-create'),  
     # Endpoint para los detalles del post
     path('posts/<int:pk>/', PostDetailViewSet.as_view({'get': 'retrieve'}), name='post-detail'), # Esto se usa para obtener detalles del post
     #Endpoint para borrar un post
