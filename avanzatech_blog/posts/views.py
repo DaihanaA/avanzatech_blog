@@ -183,10 +183,10 @@ class BlogPostUpdateView(RetrieveUpdateAPIView):
     def perform_update(self, serializer):
         post = self.get_object()
 
-        # ✅ Verificar permisos con DRF
+         # ✅ Verificar permisos con DRF
         self.check_object_permissions(self.request, post)
 
-        serializer.save(author=self.request.user)
+        serializer.save(author=post.author)  # 🔹 Mantiene el autor original
 
     
 from rest_framework.permissions import AllowAny

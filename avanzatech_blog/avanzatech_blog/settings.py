@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,7 +26,7 @@ SECRET_KEY = 'django-insecure-*b1=p8pq3-4v0*jv4t2hm(z-skbh)f^co2wg81&#85+zl+k(a4
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['0.0.0.0', 'localhost', '127.0.0.1', '[::1]']
 
 
 # Application definition
@@ -132,15 +133,12 @@ WSGI_APPLICATION = 'avanzatech_blog.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'avanzatech_blog',
-        'USER': 'blog_user',
-        'PASSWORD': 'Secure_password123',
-        'HOST': 'localhost',  # O la IP de tu servidor si no es local
-        'PORT': '5432',  # El puerto por defecto de PostgreSQL
-        'TEST': {
-            'NAME': 'test_avanzatech_blog',
-    },
-},
+        'NAME': os.getenv('POSTGRES_DB', 'avanzatech_blog'),
+        'USER': os.getenv('POSTGRES_USER', 'blog_user'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'Secure_password123'),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),  # Aquí 'localhost' se reemplaza por 'db'
+        'PORT': os.getenv('POSTGRES_PORT', 5432),
+    }
 }
 
 # Password validation
@@ -176,7 +174,7 @@ PASSWORD_HASHERS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Bogota'
 
 USE_I18N = True
 
